@@ -60,9 +60,26 @@ class Store:
             )
         """)
 
+        # Create settings table for storing current configuration
+        db.execute("""
+            CREATE TABLE IF NOT EXISTS settings (
+                id INTEGER PRIMARY KEY DEFAULT 1,
+                settings TEXT NOT NULL DEFAULT '{}'
+            )
+        """)
+
         # Create indexes for better performance
         db.execute(
             "CREATE INDEX IF NOT EXISTS idx_chunks_document_id ON chunks(document_id)"
+        )
+
+        # Save current settings to the new database
+        from haiku.rag.config import Config
+
+        settings_json = Config.model_dump_json()
+        db.execute(
+            "INSERT OR IGNORE INTO settings (id, settings) VALUES (1, ?)",
+            (settings_json,),
         )
 
         db.commit()
