@@ -24,12 +24,13 @@ class HaikuRAG:
         self,
         db_path: Path | Literal[":memory:"] = Config.DEFAULT_DATA_DIR
         / "haiku.rag.sqlite",
+        skip_validation: bool = False,
     ):
         """Initialize the RAG client with a database path."""
         if isinstance(db_path, Path):
             if not db_path.parent.exists():
                 Path.mkdir(db_path.parent, parents=True)
-        self.store = Store(db_path)
+        self.store = Store(db_path, skip_validation=skip_validation)
         self.document_repository = DocumentRepository(self.store)
         self.chunk_repository = ChunkRepository(self.store)
 
@@ -277,12 +278,16 @@ class HaikuRAG:
         Yields:
             int: The ID of the document currently being processed
         """
-        documents = await self.list_documents()
-
-        if not documents:
-            return
-
         await self.chunk_repository.delete_all()
+        self.store.recreate_embeddings_table()
+
+        # Update settings to current config
+        from haiku.rag.store.repositories.settings import SettingsRepository
+
+        settings_repo = SettingsRepository(self.store)
+        settings_repo.save()
+
+        documents = await self.list_documents()
 
         for doc in documents:
             if doc.id is not None:

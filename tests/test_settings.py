@@ -3,6 +3,7 @@ from pathlib import Path
 
 import pytest
 
+from haiku.rag.client import HaikuRAG
 from haiku.rag.config import Config
 from haiku.rag.store.engine import Store
 from haiku.rag.store.repositories.settings import (
@@ -41,7 +42,7 @@ def test_settings_save_and_retrieve():
     store.close()
 
 
-def test_config_validation_on_db_load():
+async def test_config_validation_on_db_load():
     """Test that config validation fails when loading db with mismatched settings."""
     # Create a temporary database file
     with tempfile.NamedTemporaryFile(suffix=".sqlite", delete=False) as tmp:
@@ -64,7 +65,18 @@ def test_config_validation_on_db_load():
         assert "CHUNK_SIZE" in str(exc_info.value)
         assert "Consider rebuilding" in str(exc_info.value)
 
-        # Restore original config
+        # Rebuild
+        async with HaikuRAG(db_path=db_path, skip_validation=True) as client:
+            async for _ in client.rebuild_database():
+                pass  # Process all documents
+
+        # Verify we can now load the database without exception (settings were updated)
+        store2 = Store(db_path)
+        settings_repo2 = SettingsRepository(store2)
+        db_settings = settings_repo2.get()
+        assert db_settings["CHUNK_SIZE"] == 999
+        store2.close()
+
         Config.CHUNK_SIZE = original_chunk_size
 
     finally:

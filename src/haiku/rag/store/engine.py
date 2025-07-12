@@ -9,15 +9,18 @@ from haiku.rag.embeddings import get_embedder
 
 
 class Store:
-    def __init__(self, db_path: Path | Literal[":memory:"]):
+    def __init__(
+        self, db_path: Path | Literal[":memory:"], skip_validation: bool = False
+    ):
         self.db_path: Path | Literal[":memory:"] = db_path
         self._connection = self.create_db()
 
         # Validate config compatibility after connection is established
-        from haiku.rag.store.repositories.settings import SettingsRepository
+        if not skip_validation:
+            from haiku.rag.store.repositories.settings import SettingsRepository
 
-        settings_repo = SettingsRepository(self)
-        settings_repo.validate_config_compatibility()
+            settings_repo = SettingsRepository(self)
+            settings_repo.validate_config_compatibility()
 
     def create_db(self) -> sqlite3.Connection:
         """Create the database and tables with sqlite-vec support for embeddings."""
@@ -90,6 +93,25 @@ class Store:
 
         db.commit()
         return db
+
+    def recreate_embeddings_table(self) -> None:
+        """Recreate the embeddings table with current vector dimensions."""
+        if self._connection is None:
+            raise ValueError("Store connection is not available")
+
+        # Drop existing embeddings table
+        self._connection.execute("DROP TABLE IF EXISTS chunk_embeddings")
+
+        # Recreate with current dimensions
+        embedder = get_embedder()
+        self._connection.execute(f"""
+            CREATE VIRTUAL TABLE chunk_embeddings USING vec0(
+                chunk_id INTEGER PRIMARY KEY,
+                embedding FLOAT[{embedder._vector_dim}]
+            )
+        """)
+
+        self._connection.commit()
 
     @staticmethod
     def serialize_embedding(embedding: list[float]) -> bytes:
