@@ -166,29 +166,26 @@ class HaikuRAG:
 
             # Create a temporary file with the appropriate extension
             with tempfile.NamedTemporaryFile(
-                mode="wb", suffix=file_extension, delete=False
+                mode="wb", suffix=file_extension
             ) as temp_file:
                 temp_file.write(response.content)
+                temp_file.flush()  # Ensure content is written to disk
                 temp_path = Path(temp_file.name)
 
-            try:
                 # Parse the content using FileReader
                 content = FileReader.parse_file(temp_path)
 
-                # Merge metadata with contentType and md5
-                metadata.update({"contentType": content_type, "md5": md5_hash})
+            # Merge metadata with contentType and md5
+            metadata.update({"contentType": content_type, "md5": md5_hash})
 
-                if existing_doc:
-                    existing_doc.content = content
-                    existing_doc.metadata = metadata
-                    return await self.update_document(existing_doc)
-                else:
-                    return await self.create_document(
-                        content=content, uri=url, metadata=metadata
-                    )
-            finally:
-                # Clean up temporary file
-                temp_path.unlink(missing_ok=True)
+            if existing_doc:
+                existing_doc.content = content
+                existing_doc.metadata = metadata
+                return await self.update_document(existing_doc)
+            else:
+                return await self.create_document(
+                    content=content, uri=url, metadata=metadata
+                )
 
     def _get_extension_from_content_type_or_url(
         self, url: str, content_type: str
