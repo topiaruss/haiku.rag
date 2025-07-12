@@ -4,6 +4,12 @@ from typing import Any
 from haiku.rag.store.engine import Store
 
 
+class ConfigMismatchError(Exception):
+    """Raised when current config doesn't match stored settings."""
+
+    pass
+
+
 class SettingsRepository:
     def __init__(self, store: Store):
         self.store = store
@@ -34,3 +40,39 @@ class SettingsRepository:
         )
 
         self.store._connection.commit()
+
+    def validate_config_compatibility(self) -> None:
+        """Check if current config is compatible with stored settings.
+
+        Raises ConfigMismatchError if there are incompatible differences.
+        If no settings exist, saves current config.
+        """
+        db_settings = self.get()
+        if not db_settings:
+            # No settings in DB, save current config
+            self.save()
+            return
+
+        from haiku.rag.config import Config
+
+        current_config = Config.model_dump(mode="json")
+
+        # Critical settings that must match
+        critical_settings = [
+            "EMBEDDINGS_PROVIDER",
+            "EMBEDDINGS_MODEL",
+            "EMBEDDINGS_VECTOR_DIM",
+            "CHUNK_SIZE",
+            "CHUNK_OVERLAP",
+        ]
+
+        errors = []
+        for setting in critical_settings:
+            if db_settings.get(setting) != current_config.get(setting):
+                errors.append(
+                    f"{setting}: current={current_config.get(setting)}, stored={db_settings.get(setting)}"
+                )
+
+        if errors:
+            error_msg = f"Config mismatch detected: {'; '.join(errors)}. Consider rebuilding the database with the current configuration."
+            raise ConfigMismatchError(error_msg)

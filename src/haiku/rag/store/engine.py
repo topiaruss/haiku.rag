@@ -13,6 +13,12 @@ class Store:
         self.db_path: Path | Literal[":memory:"] = db_path
         self._connection = self.create_db()
 
+        # Validate config compatibility after connection is established
+        from haiku.rag.store.repositories.settings import SettingsRepository
+
+        settings_repo = SettingsRepository(self)
+        settings_repo.validate_config_compatibility()
+
     def create_db(self) -> sqlite3.Connection:
         """Create the database and tables with sqlite-vec support for embeddings."""
         db = sqlite3.connect(self.db_path)

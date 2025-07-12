@@ -1,6 +1,14 @@
+import tempfile
+from pathlib import Path
+
+import pytest
+
 from haiku.rag.config import Config
 from haiku.rag.store.engine import Store
-from haiku.rag.store.repositories.settings import SettingsRepository
+from haiku.rag.store.repositories.settings import (
+    ConfigMismatchError,
+    SettingsRepository,
+)
 
 
 def test_settings_table_populated_on_store_init():
@@ -31,3 +39,35 @@ def test_settings_save_and_retrieve():
 
     Config.CHUNK_SIZE = original_chunk_size
     store.close()
+
+
+def test_config_validation_on_db_load():
+    """Test that config validation fails when loading db with mismatched settings."""
+    # Create a temporary database file
+    with tempfile.NamedTemporaryFile(suffix=".sqlite", delete=False) as tmp:
+        db_path = Path(tmp.name)
+
+    try:
+        # Create store and save settings
+        store1 = Store(db_path)
+        SettingsRepository(store1)
+        store1.close()
+
+        # Change config
+        original_chunk_size = Config.CHUNK_SIZE
+        Config.CHUNK_SIZE = 999
+
+        # Loading the database should raise ConfigMismatchError
+        with pytest.raises(ConfigMismatchError) as exc_info:
+            Store(db_path)
+
+        assert "CHUNK_SIZE" in str(exc_info.value)
+        assert "Consider rebuilding" in str(exc_info.value)
+
+        # Restore original config
+        Config.CHUNK_SIZE = original_chunk_size
+
+    finally:
+        # Cleanup
+        if db_path.exists():
+            db_path.unlink()
