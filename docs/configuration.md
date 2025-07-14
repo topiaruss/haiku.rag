@@ -2,6 +2,9 @@
 
 Configuration is done through the use of environment variables.
 
+!!! note
+    If you create a db with certain settings and later change them, `haiku.rag` will detect incompatibilities (for example, if you change embedding provider) and will exit. You can **rebuild** the database to apply the new settings, see [Rebuild Database](./cli.md#rebuild-database).
+
 ## File Monitoring
 
 Set directories to monitor for automatic indexing:
