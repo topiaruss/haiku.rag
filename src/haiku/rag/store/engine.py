@@ -6,6 +6,7 @@ from typing import Literal
 
 import sqlite_vec
 from packaging.version import parse
+from rich.console import Console
 
 from haiku.rag.config import Config
 from haiku.rag.embeddings import get_embedder
@@ -47,6 +48,7 @@ class Store:
         # If we have a db already, perform upgrades and return
         if self.db_path != ":memory:" and "documents" in existing_tables:
             # Upgrade database
+            console = Console()
             db_version = self.get_user_version()
             for version, steps in upgrades:
                 if parse(current_version) >= parse(version) and parse(version) > parse(
@@ -54,6 +56,9 @@ class Store:
                 ):
                     for step in steps:
                         step(db)
+                        console.print(
+                            f"[green][b]DB Upgrade: [/b]{step.__doc__}[/green]"
+                        )
             return
 
         # Create documents table

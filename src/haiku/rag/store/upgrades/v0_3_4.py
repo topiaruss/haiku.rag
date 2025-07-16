@@ -5,7 +5,7 @@ from haiku.rag.config import Config
 
 
 def add_settings_table(db: Connection) -> None:
-    # Create settings table for storing current configuration
+    """Create settings table for storing current configuration"""
     db.execute("""
         CREATE TABLE settings (
             id INTEGER PRIMARY KEY DEFAULT 1,
