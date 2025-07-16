@@ -7,15 +7,14 @@ from packaging.version import Version, parse
 
 
 def get_default_data_dir() -> Path:
-    """
-    Get the user data directory for the current system platform.
+    """Get the user data directory for the current system platform.
 
     Linux: ~/.local/share/haiku.rag
     macOS: ~/Library/Application Support/haiku.rag
     Windows: C:/Users/<USER>/AppData/Roaming/haiku.rag
 
-    :return: User Data Path
-    :rtype: Path
+    Returns:
+        User Data Path.
     """
     home = Path.home()
 
@@ -30,13 +29,13 @@ def get_default_data_dir() -> Path:
 
 
 def semantic_version_to_int(version: str) -> int:
-    """
-    Convert a semantic version string to an integer.
+    """Convert a semantic version string to an integer.
 
-    :param version: Semantic version string
-    :type version: str
-    :return: Integer representation of semantic version
-    :rtype: int
+    Args:
+        version: Semantic version string.
+
+    Returns:
+        Integer representation of semantic version.
     """
     major, minor, patch = version.split(".")
     major = int(major) << 16
@@ -46,13 +45,13 @@ def semantic_version_to_int(version: str) -> int:
 
 
 def int_to_semantic_version(version: int) -> str:
-    """
-    Convert an integer to a semantic version string.
+    """Convert an integer to a semantic version string.
 
-    :param version: Integer representation of semantic version
-    :type version: int
-    :return: Semantic version string
-    :rtype: str
+    Args:
+        version: Integer representation of semantic version.
+
+    Returns:
+        Semantic version string.
     """
     major = version >> 16
     minor = (version >> 8) & 255
@@ -61,11 +60,11 @@ def int_to_semantic_version(version: int) -> str:
 
 
 async def is_up_to_date() -> tuple[bool, Version, Version]:
-    """
-    Checks whether haiku.rag is current.
+    """Check whether haiku.rag is current.
 
-    :return: A tuple containing a boolean indicating whether haiku.rag is current, the running version and the latest version
-    :rtype: tuple[bool, Version, Version]
+    Returns:
+        A tuple containing a boolean indicating whether haiku.rag is current,
+        the running version and the latest version.
     """
 
     async with httpx.AsyncClient() as client:

@@ -26,7 +26,12 @@ class HaikuRAG:
         / "haiku.rag.sqlite",
         skip_validation: bool = False,
     ):
-        """Initialize the RAG client with a database path."""
+        """Initialize the RAG client with a database path.
+
+        Args:
+            db_path: Path to the SQLite database file or ":memory:" for in-memory database.
+            skip_validation: Whether to skip configuration validation on database load.
+        """
         if isinstance(db_path, Path):
             if not db_path.parent.exists():
                 Path.mkdir(db_path.parent, parents=True)
@@ -46,7 +51,16 @@ class HaikuRAG:
     async def create_document(
         self, content: str, uri: str | None = None, metadata: dict | None = None
     ) -> Document:
-        """Create a new document with optional URI and metadata."""
+        """Create a new document with optional URI and metadata.
+
+        Args:
+            content: The text content of the document.
+            uri: Optional URI identifier for the document.
+            metadata: Optional metadata dictionary.
+
+        Returns:
+            The created Document instance.
+        """
         document = Document(
             content=content,
             uri=uri,
@@ -219,11 +233,25 @@ class HaikuRAG:
         return ".html"
 
     async def get_document_by_id(self, document_id: int) -> Document | None:
-        """Get a document by its ID."""
+        """Get a document by its ID.
+
+        Args:
+            document_id: The unique identifier of the document.
+
+        Returns:
+            The Document instance if found, None otherwise.
+        """
         return await self.document_repository.get_by_id(document_id)
 
     async def get_document_by_uri(self, uri: str) -> Document | None:
-        """Get a document by its URI."""
+        """Get a document by its URI.
+
+        Args:
+            uri: The URI identifier of the document.
+
+        Returns:
+            The Document instance if found, None otherwise.
+        """
         return await self.document_repository.get_by_uri(uri)
 
     async def update_document(self, document: Document) -> Document:
@@ -237,7 +265,15 @@ class HaikuRAG:
     async def list_documents(
         self, limit: int | None = None, offset: int | None = None
     ) -> list[Document]:
-        """List all documents with optional pagination."""
+        """List all documents with optional pagination.
+
+        Args:
+            limit: Maximum number of documents to return.
+            offset: Number of documents to skip.
+
+        Returns:
+            List of Document instances.
+        """
         return await self.document_repository.list_all(limit=limit, offset=offset)
 
     async def search(
@@ -246,12 +282,12 @@ class HaikuRAG:
         """Search for relevant chunks using hybrid search (vector similarity + full-text search).
 
         Args:
-            query: The search query string
-            limit: Maximum number of results to return
-            k: Parameter for Reciprocal Rank Fusion (default: 60)
+            query: The search query string.
+            limit: Maximum number of results to return.
+            k: Parameter for Reciprocal Rank Fusion (default: 60).
 
         Returns:
-            List of (chunk, score) tuples ordered by relevance
+            List of (chunk, score) tuples ordered by relevance.
         """
         return await self.chunk_repository.search_chunks_hybrid(query, limit, k)
 
@@ -259,10 +295,10 @@ class HaikuRAG:
         """Ask a question using the configured QA agent.
 
         Args:
-            question: The question to ask
+            question: The question to ask.
 
         Returns:
-            The generated answer as a string
+            The generated answer as a string.
         """
         from haiku.rag.qa import get_qa_agent
 
