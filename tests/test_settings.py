@@ -50,7 +50,6 @@ async def test_config_validation_on_db_load():
 
         # Create store and save settings
         store1 = Store(db_path)
-        SettingsRepository(store1)
         store1.close()
 
         # Change config
