@@ -5,7 +5,7 @@ import typer
 from rich.console import Console
 
 from haiku.rag.app import HaikuRAGApp
-from haiku.rag.utils import get_default_data_dir
+from haiku.rag.utils import get_default_data_dir, is_up_to_date
 
 cli = typer.Typer(
     context_settings={"help_option_names": ["-h", "--help"]}, no_args_is_help=True
@@ -13,6 +13,23 @@ cli = typer.Typer(
 
 console = Console()
 event_loop = asyncio.get_event_loop()
+
+
+async def check_version():
+    """Check if haiku.rag is up to date and show warning if not."""
+    up_to_date, current_version, latest_version = await is_up_to_date()
+    if not up_to_date:
+        console.print(
+            f"[yellow]Warning: haiku.rag is outdated. Current: {current_version}, Latest: {latest_version}[/yellow]"
+        )
+        console.print("[yellow]Please update.[/yellow]")
+
+
+@cli.callback()
+def main():
+    """haiku.rag CLI - SQLite-based RAG system"""
+    # Run version check before any command
+    event_loop.run_until_complete(check_version())
 
 
 @cli.command("list", help="List all stored documents")
