@@ -6,15 +6,11 @@ from haiku.rag.config import Config
 
 
 class Chunker:
-    """
-    A class that chunks text into smaller pieces for embedding and retrieval.
+    """A class that chunks text into smaller pieces for embedding and retrieval.
 
-    Parameters
-    ----------
-    chunk_size : int
-        The maximum size of a chunk in characters.
-    chunk_overlap : int
-        The number of characters of overlap between chunks.
+    Args:
+        chunk_size: The maximum size of a chunk in tokens.
+        chunk_overlap: The number of tokens of overlap between chunks.
     """
 
     encoder: ClassVar[tiktoken.Encoding] = tiktoken.encoding_for_model("gpt-4o")
@@ -28,18 +24,13 @@ class Chunker:
         self.chunk_overlap = chunk_overlap
 
     async def chunk(self, text: str) -> list[str]:
-        """
-        Split the text into chunks.
+        """Split the text into chunks based on token boundaries.
 
-        Parameters
-        ----------
-        text : str
-            The text to be split into chunks.
+        Args:
+            text: The text to be split into chunks.
 
-        Returns
-        -------
-        list
-            A list of text chunks.
+        Returns:
+            A list of text chunks with token-based boundaries and overlap.
         """
         if not text:
             return []

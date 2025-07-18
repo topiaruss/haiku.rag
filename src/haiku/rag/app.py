@@ -3,6 +3,7 @@ from pathlib import Path
 
 from rich.console import Console
 from rich.markdown import Markdown
+from rich.progress import Progress
 
 from haiku.rag.client import HaikuRAG
 from haiku.rag.config import Config
@@ -61,6 +62,61 @@ class HaikuRAGApp:
             for chunk, score in results:
                 self._rich_print_search_result(chunk, score)
 
+    async def ask(self, question: str):
+        async with HaikuRAG(db_path=self.db_path) as self.client:
+            try:
+                answer = await self.client.ask(question)
+                self.console.print(f"[bold blue]Question:[/bold blue] {question}")
+                self.console.print()
+                self.console.print("[bold green]Answer:[/bold green]")
+                self.console.print(Markdown(answer))
+            except Exception as e:
+                self.console.print(f"[red]Error: {e}[/red]")
+
+    async def rebuild(self):
+        async with HaikuRAG(db_path=self.db_path, skip_validation=True) as client:
+            try:
+                documents = await client.list_documents()
+                total_docs = len(documents)
+
+                if total_docs == 0:
+                    self.console.print(
+                        "[yellow]No documents found in database.[/yellow]"
+                    )
+                    return
+
+                self.console.print(
+                    f"[b]Rebuilding database with {total_docs} documents...[/b]"
+                )
+                with Progress() as progress:
+                    task = progress.add_task("Rebuilding...", total=total_docs)
+                    async for _ in client.rebuild_database():
+                        progress.update(task, advance=1)
+
+                self.console.print("[b]Database rebuild completed successfully.[/b]")
+            except Exception as e:
+                self.console.print(f"[red]Error rebuilding database: {e}[/red]")
+
+    def show_settings(self):
+        """Display current configuration settings."""
+        self.console.print("[bold]haiku.rag configuration[/bold]")
+        self.console.print()
+
+        # Get all config fields dynamically
+        for field_name, field_value in Config.model_dump().items():
+            # Format the display value
+            if isinstance(field_value, str) and (
+                "key" in field_name.lower()
+                or "password" in field_name.lower()
+                or "token" in field_name.lower()
+            ):
+                # Hide sensitive values but show if they're set
+                display_value = "✓ Set" if field_value else "✗ Not set"
+            else:
+                display_value = field_value
+
+            self.console.print(f"  [cyan]{field_name}[/cyan]: {display_value}")
+
     def _rich_print_document(self, doc: Document, truncate: bool = False):
         """Format a document for display."""
         if truncate:
@@ -88,6 +144,12 @@ class HaikuRAGApp:
             f"[repr.attrib_name]document_id[/repr.attrib_name]: {chunk.document_id} "
             f"[repr.attrib_name]score[/repr.attrib_name]: {score:.4f}"
         )
+        if chunk.document_uri:
+            self.console.print("[repr.attrib_name]document uri[/repr.attrib_name]:")
+            self.console.print(chunk.document_uri)
+        if chunk.document_meta:
+            self.console.print("[repr.attrib_name]document meta[/repr.attrib_name]:")
+            self.console.print(chunk.document_meta)
         self.console.print("[repr.attrib_name]content[/repr.attrib_name]:")
         self.console.print(content)
         self.console.rule()

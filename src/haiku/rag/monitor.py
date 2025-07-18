@@ -49,7 +49,6 @@ class FileWatcher:
         try:
             uri = file.as_uri()
             existing_doc = await self.client.get_document_by_uri(uri)
-            print(uri)
             if existing_doc:
                 doc = await self.client.create_document_from_source(str(file))
                 logger.info(f"Updated document {existing_doc.id} from {file}")

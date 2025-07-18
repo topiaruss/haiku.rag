@@ -1,6 +1,7 @@
 import hashlib
 import mimetypes
 import tempfile
+from collections.abc import AsyncGenerator
 from pathlib import Path
 from typing import Literal
 from urllib.parse import urlparse
@@ -23,12 +24,18 @@ class HaikuRAG:
         self,
         db_path: Path | Literal[":memory:"] = Config.DEFAULT_DATA_DIR
         / "haiku.rag.sqlite",
+        skip_validation: bool = False,
     ):
-        """Initialize the RAG client with a database path."""
+        """Initialize the RAG client with a database path.
+
+        Args:
+            db_path: Path to the SQLite database file or ":memory:" for in-memory database.
+            skip_validation: Whether to skip configuration validation on database load.
+        """
         if isinstance(db_path, Path):
             if not db_path.parent.exists():
                 Path.mkdir(db_path.parent, parents=True)
-        self.store = Store(db_path)
+        self.store = Store(db_path, skip_validation=skip_validation)
         self.document_repository = DocumentRepository(self.store)
         self.chunk_repository = ChunkRepository(self.store)
 
@@ -36,7 +43,7 @@ class HaikuRAG:
         """Async context manager entry."""
         return self
 
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
+    async def __aexit__(self, exc_type, exc_val, exc_tb):  # noqa: ARG002
         """Async context manager exit."""
         self.close()
         return False
@@ -44,7 +51,16 @@ class HaikuRAG:
     async def create_document(
         self, content: str, uri: str | None = None, metadata: dict | None = None
     ) -> Document:
-        """Create a new document with optional URI and metadata."""
+        """Create a new document with optional URI and metadata.
+
+        Args:
+            content: The text content of the document.
+            uri: Optional URI identifier for the document.
+            metadata: Optional metadata dictionary.
+
+        Returns:
+            The created Document instance.
+        """
         document = Document(
             content=content,
             uri=uri,
@@ -164,29 +180,26 @@ class HaikuRAG:
 
             # Create a temporary file with the appropriate extension
             with tempfile.NamedTemporaryFile(
-                mode="wb", suffix=file_extension, delete=False
+                mode="wb", suffix=file_extension
             ) as temp_file:
                 temp_file.write(response.content)
+                temp_file.flush()  # Ensure content is written to disk
                 temp_path = Path(temp_file.name)
 
-            try:
                 # Parse the content using FileReader
                 content = FileReader.parse_file(temp_path)
 
-                # Merge metadata with contentType and md5
-                metadata.update({"contentType": content_type, "md5": md5_hash})
+            # Merge metadata with contentType and md5
+            metadata.update({"contentType": content_type, "md5": md5_hash})
 
-                if existing_doc:
-                    existing_doc.content = content
-                    existing_doc.metadata = metadata
-                    return await self.update_document(existing_doc)
-                else:
-                    return await self.create_document(
-                        content=content, uri=url, metadata=metadata
-                    )
-            finally:
-                # Clean up temporary file
-                temp_path.unlink(missing_ok=True)
+            if existing_doc:
+                existing_doc.content = content
+                existing_doc.metadata = metadata
+                return await self.update_document(existing_doc)
+            else:
+                return await self.create_document(
+                    content=content, uri=url, metadata=metadata
+                )
 
     def _get_extension_from_content_type_or_url(
         self, url: str, content_type: str
@@ -220,11 +233,25 @@ class HaikuRAG:
         return ".html"
 
     async def get_document_by_id(self, document_id: int) -> Document | None:
-        """Get a document by its ID."""
+        """Get a document by its ID.
+
+        Args:
+            document_id: The unique identifier of the document.
+
+        Returns:
+            The Document instance if found, None otherwise.
+        """
         return await self.document_repository.get_by_id(document_id)
 
     async def get_document_by_uri(self, uri: str) -> Document | None:
-        """Get a document by its URI."""
+        """Get a document by its URI.
+
+        Args:
+            uri: The URI identifier of the document.
+
+        Returns:
+            The Document instance if found, None otherwise.
+        """
         return await self.document_repository.get_by_uri(uri)
 
     async def update_document(self, document: Document) -> Document:
@@ -238,7 +265,15 @@ class HaikuRAG:
     async def list_documents(
         self, limit: int | None = None, offset: int | None = None
     ) -> list[Document]:
-        """List all documents with optional pagination."""
+        """List all documents with optional pagination.
+
+        Args:
+            limit: Maximum number of documents to return.
+            offset: Number of documents to skip.
+
+        Returns:
+            List of Document instances.
+        """
         return await self.document_repository.list_all(limit=limit, offset=offset)
 
     async def search(
@@ -247,14 +282,55 @@ class HaikuRAG:
         """Search for relevant chunks using hybrid search (vector similarity + full-text search).
 
         Args:
-            query: The search query string
-            limit: Maximum number of results to return
-            k: Parameter for Reciprocal Rank Fusion (default: 60)
+            query: The search query string.
+            limit: Maximum number of results to return.
+            k: Parameter for Reciprocal Rank Fusion (default: 60).
 
         Returns:
-            List of (chunk, score) tuples ordered by relevance
+            List of (chunk, score) tuples ordered by relevance.
         """
         return await self.chunk_repository.search_chunks_hybrid(query, limit, k)
+
+    async def ask(self, question: str) -> str:
+        """Ask a question using the configured QA agent.
+
+        Args:
+            question: The question to ask.
+
+        Returns:
+            The generated answer as a string.
+        """
+        from haiku.rag.qa import get_qa_agent
+
+        qa_agent = get_qa_agent(self)
+        return await qa_agent.answer(question)
+
+    async def rebuild_database(self) -> AsyncGenerator[int, None]:
+        """Rebuild the database by deleting all chunks and re-indexing all documents.
+
+        Yields:
+            int: The ID of the document currently being processed
+        """
+        await self.chunk_repository.delete_all()
+        self.store.recreate_embeddings_table()
+
+        # Update settings to current config
+        from haiku.rag.store.repositories.settings import SettingsRepository
+
+        settings_repo = SettingsRepository(self.store)
+        settings_repo.save()
+
+        documents = await self.list_documents()
+
+        for doc in documents:
+            if doc.id is not None:
+                await self.chunk_repository.create_chunks_for_document(
+                    doc.id, doc.content, commit=False
+                )
+                yield doc.id
+
+        if self.store._connection:
+            self.store._connection.commit()
 
     def close(self):
         """Close the underlying store connection."""

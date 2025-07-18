@@ -56,3 +56,33 @@ async def test_search_qa_corpus(qa_corpus: Dataset):
         assert target_document.id in target_document_ids
 
     store.close()
+
+
+@pytest.mark.asyncio
+async def test_chunks_include_document_info():
+    """Test that search results include document URI and metadata."""
+    store = Store(":memory:")
+    doc_repo = DocumentRepository(store)
+    chunk_repo = ChunkRepository(store)
+
+    # Create a document with URI and metadata
+    document = Document(
+        content="This is a test document with some content for searching.",
+        uri="https://example.com/test.html",
+        metadata={"title": "Test Document", "author": "Test Author"},
+    )
+
+    created_document = await doc_repo.create(document)
+
+    # Search for chunks
+    results = await chunk_repo.search_chunks_hybrid("test document", limit=1)
+
+    assert len(results) > 0
+    chunk, score = results[0]
+
+    # Verify the chunk includes document information
+    assert chunk.document_uri == "https://example.com/test.html"
+    assert chunk.document_meta == {"title": "Test Document", "author": "Test Author"}
+    assert chunk.document_id == created_document.id
+
+    store.close()

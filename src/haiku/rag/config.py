@@ -19,10 +19,18 @@ class AppConfig(BaseModel):
     EMBEDDINGS_MODEL: str = "mxbai-embed-large"
     EMBEDDINGS_VECTOR_DIM: int = 1024
 
+    QA_PROVIDER: str = "ollama"
+    QA_MODEL: str = "qwen3"
+
     CHUNK_SIZE: int = 256
     CHUNK_OVERLAP: int = 32
 
     OLLAMA_BASE_URL: str = "http://localhost:11434"
+
+    # Provider keys
+    VOYAGE_API_KEY: str = ""
+    OPENAI_API_KEY: str = ""
+    ANTHROPIC_API_KEY: str = ""
 
     @field_validator("MONITOR_DIRECTORIES", mode="before")
     @classmethod
@@ -38,3 +46,9 @@ class AppConfig(BaseModel):
 
 # Expose Config object for app to import
 Config = AppConfig.model_validate(os.environ)
+if Config.OPENAI_API_KEY:
+    os.environ["OPENAI_API_KEY"] = Config.OPENAI_API_KEY
+if Config.VOYAGE_API_KEY:
+    os.environ["VOYAGE_API_KEY"] = Config.VOYAGE_API_KEY
+if Config.ANTHROPIC_API_KEY:
+    os.environ["ANTHROPIC_API_KEY"] = Config.ANTHROPIC_API_KEY

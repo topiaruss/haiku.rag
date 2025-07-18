@@ -208,6 +208,22 @@ class ChunkRepository(BaseRepository[Chunk]):
 
         return created_chunks
 
+    async def delete_all(self, commit: bool = True) -> bool:
+        """Delete all chunks from the database."""
+        if self.store._connection is None:
+            raise ValueError("Store connection is not available")
+
+        cursor = self.store._connection.cursor()
+
+        cursor.execute("DELETE FROM chunks_fts")
+        cursor.execute("DELETE FROM chunk_embeddings")
+        cursor.execute("DELETE FROM chunks")
+
+        deleted = cursor.rowcount > 0
+        if commit:
+            self.store._connection.commit()
+        return deleted
+
     async def delete_by_document_id(
         self, document_id: int, commit: bool = True
     ) -> bool:
@@ -240,9 +256,10 @@ class ChunkRepository(BaseRepository[Chunk]):
         # Search for similar chunks using sqlite-vec
         cursor.execute(
             """
-            SELECT c.id, c.document_id, c.content, c.metadata, distance
+            SELECT c.id, c.document_id, c.content, c.metadata, distance, d.uri, d.metadata as document_metadata
             FROM chunk_embeddings
             JOIN chunks c ON c.id = chunk_embeddings.chunk_id
+            JOIN documents d ON c.document_id = d.id
             WHERE embedding MATCH :embedding AND k = :k
             ORDER BY distance
             """,
@@ -257,10 +274,14 @@ class ChunkRepository(BaseRepository[Chunk]):
                     document_id=document_id,
                     content=content,
                     metadata=json.loads(metadata_json) if metadata_json else {},
+                    document_uri=document_uri,
+                    document_meta=json.loads(document_metadata_json)
+                    if document_metadata_json
+                    else {},
                 ),
                 1.0 / (1.0 + distance),
             )
-            for chunk_id, document_id, content, metadata_json, distance in results
+            for chunk_id, document_id, content, metadata_json, distance, document_uri, document_metadata_json in results
         ]
 
     async def search_chunks_fts(
@@ -281,9 +302,10 @@ class ChunkRepository(BaseRepository[Chunk]):
         # Search using FTS5
         cursor.execute(
             """
-            SELECT c.id, c.document_id, c.content, c.metadata, rank
+            SELECT c.id, c.document_id, c.content, c.metadata, rank, d.uri, d.metadata as document_metadata
             FROM chunks_fts
             JOIN chunks c ON c.id = chunks_fts.rowid
+            JOIN documents d ON c.document_id = d.id
             WHERE chunks_fts MATCH :query
             ORDER BY rank
             LIMIT :limit
@@ -300,10 +322,14 @@ class ChunkRepository(BaseRepository[Chunk]):
                     document_id=document_id,
                     content=content,
                     metadata=json.loads(metadata_json) if metadata_json else {},
+                    document_uri=document_uri,
+                    document_meta=json.loads(document_metadata_json)
+                    if document_metadata_json
+                    else {},
                 ),
                 -rank,
             )
-            for chunk_id, document_id, content, metadata_json, rank in results
+            for chunk_id, document_id, content, metadata_json, rank, document_uri, document_metadata_json in results
             # FTS5 rank is negative BM25 score
         ]
 
@@ -325,7 +351,6 @@ class ChunkRepository(BaseRepository[Chunk]):
         words = re.findall(r"\b\w+\b", query.lower())
         # Join with OR to find chunks containing any of the keywords
         fts_query = " OR ".join(words) if words else query
-
         # Perform hybrid search using RRF (Reciprocal Rank Fusion)
         cursor.execute(
             """
@@ -369,9 +394,10 @@ class ChunkRepository(BaseRepository[Chunk]):
                 LEFT JOIN vector_search v ON a.id = v.id
                 LEFT JOIN fts_search f ON a.id = f.id
             )
-            SELECT id, document_id, content, metadata, rrf_score
-            FROM rrf_scores
-            ORDER BY rrf_score DESC
+            SELECT r.id, r.document_id, r.content, r.metadata, r.rrf_score, d.uri, d.metadata as document_metadata
+            FROM rrf_scores r
+            JOIN documents d ON r.document_id = d.id
+            ORDER BY r.rrf_score DESC
             LIMIT :limit
             """,
             {
@@ -391,10 +417,14 @@ class ChunkRepository(BaseRepository[Chunk]):
                     document_id=document_id,
                     content=content,
                     metadata=json.loads(metadata_json) if metadata_json else {},
+                    document_uri=document_uri,
+                    document_meta=json.loads(document_metadata_json)
+                    if document_metadata_json
+                    else {},
                 ),
                 rrf_score,
             )
-            for chunk_id, document_id, content, metadata_json, rrf_score in results
+            for chunk_id, document_id, content, metadata_json, rrf_score, document_uri, document_metadata_json in results
         ]
 
     async def get_by_document_id(self, document_id: int) -> list[Chunk]:
@@ -405,9 +435,11 @@ class ChunkRepository(BaseRepository[Chunk]):
         cursor = self.store._connection.cursor()
         cursor.execute(
             """
-            SELECT id, document_id, content, metadata
-            FROM chunks WHERE document_id = :document_id
-            ORDER BY JSON_EXTRACT(metadata, '$.order')
+            SELECT c.id, c.document_id, c.content, c.metadata, d.uri, d.metadata as document_metadata
+            FROM chunks c
+            JOIN documents d ON c.document_id = d.id
+            WHERE c.document_id = :document_id
+            ORDER BY JSON_EXTRACT(c.metadata, '$.order')
             """,
             {"document_id": document_id},
         )
@@ -419,6 +451,10 @@ class ChunkRepository(BaseRepository[Chunk]):
                 document_id=document_id,
                 content=content,
                 metadata=json.loads(metadata_json) if metadata_json else {},
+                document_uri=document_uri,
+                document_meta=json.loads(document_metadata_json)
+                if document_metadata_json
+                else {},
             )
-            for chunk_id, document_id, content, metadata_json in rows
+            for chunk_id, document_id, content, metadata_json, document_uri, document_metadata_json in rows
         ]
